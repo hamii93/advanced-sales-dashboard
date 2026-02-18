@@ -2,86 +2,133 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 
-st.set_page_config(page_title="Sales Dashboard", layout="wide")
+# ================= CONFIG =================
+st.set_page_config(page_title="Advanced Sales Dashboard", layout="wide")
 
-st.title("📊 Advanced Sales Dashboard")
+# ================= LOAD DATA =================
+@st.cache_data
+def load_data():
+    data = pd.read_csv("sales_data_sample.csv", encoding="ISO-8859-1")
+    data["ORDERDATE"] = pd.to_datetime(data["ORDERDATE"])
+    return data
 
-# Load data
-data = pd.read_csv("sales_data_sample.csv", encoding="ISO-8859-1")
+data = load_data()
 
-# Convert date
-data["ORDERDATE"] = pd.to_datetime(data["ORDERDATE"])
+# ================= SIDEBAR =================
+st.sidebar.title("Navigation")
+page = st.sidebar.radio("Select Page", ["Overview", "Regional Analysis", "Product Insights"])
 
-# Sidebar filter
-st.sidebar.header("Filters")
-selected_year = st.sidebar.selectbox("Select Year", sorted(data["YEAR_ID"].unique()))
+selected_year = st.sidebar.selectbox(
+    "Select Year",
+    sorted(data["YEAR_ID"].unique())
+)
 
 filtered_data = data[data["YEAR_ID"] == selected_year]
 
-# ================= KPI SECTION =================
-total_sales = filtered_data["SALES"].sum()
-total_orders = len(filtered_data)
-avg_order_value = filtered_data["SALES"].mean()
+# ================= OVERVIEW =================
+if page == "Overview":
 
-col1, col2, col3 = st.columns(3)
+    st.title("📊 Sales Overview")
 
-col1.metric("💰 Total Sales", f"${total_sales:,.0f}")
-col2.metric("📦 Total Orders", total_orders)
-col3.metric("📈 Avg Order Value", f"${avg_order_value:,.0f}")
+    total_sales = filtered_data["SALES"].sum()
+    total_orders = len(filtered_data)
+    avg_order_value = filtered_data["SALES"].mean()
 
-st.divider()
+    col1, col2, col3 = st.columns(3)
+    col1.metric("💰 Total Sales", f"${total_sales:,.0f}")
+    col2.metric("📦 Total Orders", total_orders)
+    col3.metric("📈 Avg Order Value", f"${avg_order_value:,.0f}")
 
-# ================= Monthly Sales =================
-monthly_sales = (
-    filtered_data
-    .groupby("MONTH_ID")["SALES"]
-    .sum()
-    .reset_index()
-)
+    st.divider()
 
-fig_month = px.line(
-    monthly_sales,
-    x="MONTH_ID",
-    y="SALES",
-    markers=True,
-    title="Monthly Sales Trend",
-)
+    monthly_sales = (
+        filtered_data
+        .groupby("MONTH_ID")["SALES"]
+        .sum()
+        .reset_index()
+    )
 
-st.plotly_chart(fig_month, use_container_width=True)
+    fig_month = px.line(
+        monthly_sales,
+        x="MONTH_ID",
+        y="SALES",
+        markers=True,
+        title="Monthly Sales Trend"
+    )
 
-# ================= Product Line =================
-product_sales = (
-    filtered_data
-    .groupby("PRODUCTLINE")["SALES"]
-    .sum()
-    .reset_index()
-    .sort_values("SALES", ascending=False)
-)
+    st.plotly_chart(fig_month, use_container_width=True)
 
-fig_product = px.bar(
-    product_sales,
-    x="PRODUCTLINE",
-    y="SALES",
-    title="Sales by Product Line",
-)
 
-st.plotly_chart(fig_product, use_container_width=True)
+# ================= REGIONAL ANALYSIS =================
+elif page == "Regional Analysis":
 
-# ================= Country =================
-country_sales = (
-    filtered_data
-    .groupby("COUNTRY")["SALES"]
-    .sum()
-    .reset_index()
-    .sort_values("SALES", ascending=False)
-    .head(10)
-)
+    st.title("🌍 Regional Sales Analysis")
 
-fig_country = px.bar(
-    country_sales,
-    x="COUNTRY",
-    y="SALES",
-    title="Top 10 Countries by Sales",
-)
+    country_sales = (
+        filtered_data
+        .groupby("COUNTRY")["SALES"]
+        .sum()
+        .reset_index()
+        .sort_values("SALES", ascending=False)
+    )
 
-st.plotly_chart(fig_country, use_container_width=True)
+    fig_country = px.bar(
+        country_sales.head(10),
+        x="COUNTRY",
+        y="SALES",
+        title="Top 10 Countries by Total Sales"
+    )
+
+    st.plotly_chart(fig_country, use_container_width=True)
+
+    st.subheader("Average Order Value by Country")
+
+    country_avg = (
+        filtered_data
+        .groupby("COUNTRY")["SALES"]
+        .mean()
+        .reset_index()
+        .sort_values("SALES", ascending=False)
+    )
+
+    st.dataframe(country_avg)
+
+
+# ================= PRODUCT INSIGHTS =================
+elif page == "Product Insights":
+
+    st.title("📦 Product Performance Analysis")
+
+    product_sales = (
+        filtered_data
+        .groupby("PRODUCTLINE")["SALES"]
+        .sum()
+        .reset_index()
+        .sort_values("SALES", ascending=False)
+    )
+
+    fig_product = px.bar(
+        product_sales,
+        x="PRODUCTLINE",
+        y="SALES",
+        title="Sales by Product Line"
+    )
+
+    st.plotly_chart(fig_product, use_container_width=True)
+
+    st.subheader("Product Demand Across Countries")
+
+    product_country = (
+        filtered_data
+        .groupby(["COUNTRY", "PRODUCTLINE"])["SALES"]
+        .sum()
+        .reset_index()
+    )
+
+    pivot_table = product_country.pivot(
+        index="COUNTRY",
+        columns="PRODUCTLINE",
+        values="SALES"
+    )
+
+    st.dataframe(pivot_table.fillna(0))
